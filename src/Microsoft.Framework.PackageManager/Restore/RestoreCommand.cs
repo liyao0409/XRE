@@ -263,8 +263,6 @@ namespace Microsoft.Framework.PackageManager
 
             Reports.Information.WriteLine("{0}, {1}ms elapsed", "Install complete".Green().Bold(), sw.ElapsedMilliseconds);
 
-            PrintDependencyGraph(graphNode, restoreContext.FrameworkName);
-
             Library appLib = graphNode?.Item?.Match?.Library;
             if (appLib != null) 
             {
