@@ -46,7 +46,7 @@ namespace Microsoft.Framework.DesignTimeHost
             IPlugin plugin;
             if (_plugins.TryGetValue(data.PluginId, out plugin))
             {
-                plugin.ProcessMessage(data.Data as JObject);
+                plugin.ProcessMessage(data.Data);
             }
             else
             {
@@ -74,9 +74,7 @@ namespace Microsoft.Framework.DesignTimeHost
         {
             var pluginId = data.PluginId;
 
-            Debug.Assert(data.Data is JObject, "Plugin messages should always be a JObject");
-
-            var registerData = ((JObject)data.Data).ToObject<PluginRegisterData>();
+            var registerData = data.Data.ToObject<PluginRegisterData>();
 
             // REVIEW: Should we catch errors that result in bad assembly loads/GetTypes?
             var assembly = assemblyLoadContext.Value.Load(registerData.AssemblyName);
