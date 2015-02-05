@@ -94,14 +94,14 @@ namespace Microsoft.Framework.Runtime.FunctionalTests.ProjectFileGlobbing
         {
             var testProject = CreateTestProject(@"
 {
-    ""code"": ""*.cs;.../../lib/**/*.cs"",
+    ""code"": ""*.cs;../../lib/**/*.cs"",
 }
 ", @"src\project");
 
             VerifyFilePathsCollection(testProject.SourceFiles,
-                @"src\project\...\..\lib\source6.cs",
-                @"src\project\...\..\lib\sub3\source7.cs",
-                @"src\project\...\..\lib\sub4\source8.cs",
+                @"src\project\..\..\lib\source6.cs",
+                @"src\project\..\..\lib\sub3\source7.cs",
+                @"src\project\..\..\lib\sub4\source8.cs",
                 @"src\project\source1.cs");
         }
 
