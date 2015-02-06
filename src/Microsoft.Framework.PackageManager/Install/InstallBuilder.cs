@@ -13,7 +13,7 @@ namespace Microsoft.Framework.PackageManager
     {
         public const string CommandsFolderName = "app";
 
-        private static readonly string[] NotAllowedExportedCommandNames = new string[]
+        private static readonly string[] BlockedCommandNames = new string[]
         {
             "dotnet",
             "dotnetsdk",
@@ -60,7 +60,7 @@ namespace Microsoft.Framework.PackageManager
         {
             // Get the commands that would conflict with .net commands
             var invalidExportedCommands = _project.Commands.Keys.Where(exported =>
-                NotAllowedExportedCommandNames.Contains(exported));
+                BlockedCommandNames.Contains(exported));
 
             if (invalidExportedCommands.Any())
             {
@@ -121,7 +121,7 @@ namespace Microsoft.Framework.PackageManager
             foreach (string command in _project.Commands.Keys.Distinct())
             {
                 WriteWindowsScript(applicationFolder, command);
-                WriteLinuxScript(applicationFolder, command);
+                WriteNixScript(applicationFolder, command);
 
                 _buildReport.Information.WriteLine("Exported application command: " + command);
             }
@@ -146,7 +146,7 @@ namespace Microsoft.Framework.PackageManager
             _buildReport.Verbose.WriteLine("Exported command script: " + scriptFileName);
         }
 
-        private void WriteLinuxScript(string applicationFolder, string commandName)
+        private void WriteNixScript(string applicationFolder, string commandName)
         {
             var scriptFileName = commandName + ".sh";
             var scriptFilePath = Path.Combine(applicationFolder, scriptFileName);
