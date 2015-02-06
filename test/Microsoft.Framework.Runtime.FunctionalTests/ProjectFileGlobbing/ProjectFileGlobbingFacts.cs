@@ -94,7 +94,7 @@ namespace Microsoft.Framework.Runtime.FunctionalTests.ProjectFileGlobbing
         {
             var testProject = CreateTestProject(@"
 {
-    ""code"": ""*.cs;.../../lib/**/*.cs"",
+    ""code"": ""*.cs;../../lib/**/*.cs"",
 }
 ", @"src\project");
 

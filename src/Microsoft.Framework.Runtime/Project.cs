@@ -7,6 +7,8 @@ using System.IO;
 using System.Linq;
 using System.Runtime.Versioning;
 using System.Text;
+using Microsoft.Framework.FileSystemGlobbing;
+using Microsoft.Framework.Runtime.FileGlobbing;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using NuGet;
@@ -39,6 +41,13 @@ namespace Microsoft.Framework.Runtime
 
         private TargetFrameworkInformation _defaultTargetFrameworkConfiguration;
 
+        private Matcher _sourcesMatcher;
+        private Matcher _preprocessSourcesMatcher;
+        private Matcher _sharedSourceMatcher;
+        private Matcher _resourcesMatcher;
+        private Matcher _contentFilesMatcher;
+        private Matcher _bundleExcludeFilesMatcher;
+
         public Project()
         {
             Commands = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -47,13 +56,7 @@ namespace Microsoft.Framework.Runtime
 
         public string ProjectFilePath { get; private set; }
 
-        public string ProjectDirectory
-        {
-            get
-            {
-                return Path.GetDirectoryName(ProjectFilePath);
-            }
-        }
+        public string ProjectDirectory { get { return Path.GetDirectoryName(ProjectFilePath); } }
 
         public string Name { get; private set; }
 
@@ -99,25 +102,14 @@ namespace Microsoft.Framework.Runtime
         {
             get
             {
-                string path = ProjectDirectory;
+                if (_sourcesMatcher == null)
+                {
+                    _sourcesMatcher = new Matcher();
+                    _sourcesMatcher.AddIncludePatterns(SourcePatterns);
+                    _sourcesMatcher.AddExcludePatterns(PreprocessPatterns, SharedPatterns, ResourcesPatterns, ExcludePatterns);
+                }
 
-                var files = Enumerable.Empty<string>();
-
-                var includeFiles = SourcePatterns
-                    .SelectMany(pattern => PathResolver.PerformWildcardSearch(path, pattern))
-                    .ToArray();
-
-                var excludePatterns = PreprocessPatterns.Concat(SharedPatterns).Concat(ResourcesPatterns).Concat(ExcludePatterns)
-                    .Select(pattern => PathResolver.NormalizeWildcardForExcludedFiles(path, pattern))
-                    .ToArray();
-
-                var excludeFiles = PathResolver.GetMatches(
-                    includeFiles,
-                    x => x,
-                    excludePatterns.Select(x => Path.Combine(path, x)))
-                    .ToArray();
-
-                return files.Concat(includeFiles.Except(excludeFiles)).Distinct().ToArray();
+                return _sourcesMatcher.GetResultsInFullPath(ProjectDirectory);
             }
         }
 
@@ -125,25 +117,14 @@ namespace Microsoft.Framework.Runtime
         {
             get
             {
-                string path = ProjectDirectory;
+                if (_preprocessSourcesMatcher == null)
+                {
+                    _preprocessSourcesMatcher = new Matcher();
+                    _preprocessSourcesMatcher.AddIncludePatterns(PreprocessPatterns);
+                    _preprocessSourcesMatcher.AddExcludePatterns(SharedPatterns, ResourcesPatterns, ExcludePatterns);
+                }
 
-                var files = Enumerable.Empty<string>();
-
-                var includeFiles = PreprocessPatterns
-                    .SelectMany(pattern => PathResolver.PerformWildcardSearch(path, pattern))
-                    .ToArray();
-
-                var excludePatterns = SharedPatterns.Concat(ResourcesPatterns).Concat(ExcludePatterns)
-                    .Select(pattern => PathResolver.NormalizeWildcardForExcludedFiles(path, pattern))
-                    .ToArray();
-
-                var excludeFiles = PathResolver.GetMatches(
-                    includeFiles,
-                    x => x,
-                    excludePatterns.Select(x => Path.Combine(path, x)))
-                    .ToArray();
-
-                return files.Concat(includeFiles.Except(excludeFiles)).Distinct().ToArray();
+                return _preprocessSourcesMatcher.GetResultsInFullPath(ProjectDirectory);
             }
         }
 
@@ -151,13 +132,13 @@ namespace Microsoft.Framework.Runtime
         {
             get
             {
-                string path = ProjectDirectory;
+                if (_bundleExcludeFilesMatcher == null)
+                {
+                    _bundleExcludeFilesMatcher = new Matcher();
+                    _bundleExcludeFilesMatcher.AddIncludePatterns(BundleExcludePatterns);
+                }
 
-                var bundleExcludeFiles = BundleExcludePatterns
-                    .SelectMany(pattern => PathResolver.PerformWildcardSearch(path, pattern))
-                    .ToArray();
-
-                return bundleExcludeFiles;
+                return _bundleExcludeFilesMatcher.GetResultsInFullPath(ProjectDirectory);
             }
         }
 
@@ -165,13 +146,13 @@ namespace Microsoft.Framework.Runtime
         {
             get
             {
-                string path = ProjectDirectory;
+                if (_resourcesMatcher == null)
+                {
+                    _resourcesMatcher = new Matcher();
+                    _resourcesMatcher.AddIncludePatterns(ResourcesPatterns);
+                }
 
-                var includeFiles = ResourcesPatterns
-                    .SelectMany(pattern => PathResolver.PerformWildcardSearch(path, pattern))
-                    .ToArray();
-
-                return includeFiles;
+                return _resourcesMatcher.GetResultsInFullPath(ProjectDirectory);
             }
         }
 
@@ -179,13 +160,13 @@ namespace Microsoft.Framework.Runtime
         {
             get
             {
-                string path = ProjectDirectory;
+                if (_sharedSourceMatcher == null)
+                {
+                    _sharedSourceMatcher = new Matcher();
+                    _sharedSourceMatcher.AddIncludePatterns(SharedPatterns);
+                }
 
-                var includeFiles = SharedPatterns
-                    .SelectMany(pattern => PathResolver.PerformWildcardSearch(path, pattern))
-                    .ToArray();
-
-                return includeFiles;
+                return _sharedSourceMatcher.GetResultsInFullPath(ProjectDirectory);
             }
         }
 
@@ -193,24 +174,19 @@ namespace Microsoft.Framework.Runtime
         {
             get
             {
-                string path = ProjectDirectory;
 
-                var includeFiles = ContentsPatterns
-                    .SelectMany(pattern => PathResolver.PerformWildcardSearch(path, pattern))
-                    .ToArray();
+                if (_contentFilesMatcher == null)
+                {
+                    _contentFilesMatcher = new Matcher();
+                    _contentFilesMatcher.AddIncludePatterns(ContentsPatterns);
+                    _contentFilesMatcher.AddExcludePatterns(SharedPatterns, 
+                                                            PreprocessPatterns,
+                                                            ResourcesPatterns,
+                                                            BundleExcludePatterns,
+                                                            SourcePatterns);
+                }
 
-                var excludePatterns = PreprocessPatterns.Concat(SharedPatterns).Concat(ResourcesPatterns)
-                    .Concat(BundleExcludePatterns).Concat(SourcePatterns)
-                    .Select(pattern => PathResolver.NormalizeWildcardForExcludedFiles(path, pattern))
-                    .ToArray();
-
-                var excludeFiles = PathResolver.GetMatches(
-                    includeFiles,
-                    x => x,
-                    excludePatterns.Select(x => Path.Combine(path, x)))
-                    .ToArray();
-
-                return includeFiles.Except(excludeFiles).Distinct().ToArray();
+                return _contentFilesMatcher.GetResultsInFullPath(ProjectDirectory);
             }
         }
 
@@ -781,7 +757,6 @@ namespace Microsoft.Framework.Runtime
             return VersionUtility.ParseFrameworkName(targetFramework);
         }
 
-
         public TargetFrameworkInformation GetTargetFramework(FrameworkName targetFramework)
         {
             TargetFrameworkInformation targetFrameworkInfo;
@@ -856,6 +831,22 @@ namespace Microsoft.Framework.Runtime
         {
             path = path.TrimEnd(Path.DirectorySeparatorChar);
             return path.Substring(Path.GetDirectoryName(path).Length).Trim(Path.DirectorySeparatorChar);
+        }
+
+        private static void AddIncludePatterns(Matcher matcher, IEnumerable<string> patterns)
+        {
+            foreach (var pattern in patterns)
+            {
+                matcher.AddInclude(pattern);
+            }
+        }
+
+        private static void AddExcludePatterns(Matcher matcher, IEnumerable<string> patterns)
+        {
+            foreach (var pattern in patterns)
+            {
+                matcher.AddExclude(pattern);
+            }
         }
     }
 }
