@@ -2,18 +2,17 @@
 // Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
 
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
-using System.Runtime.Versioning;
 using System.Security.Cryptography;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Framework.PackageManager.Bundle;
-using Microsoft.Framework.PackageManager.Restore.NuGet;
 using Microsoft.Framework.Runtime;
-using Newtonsoft.Json.Linq;
 using NuGet;
 
 namespace Microsoft.Framework.PackageManager
@@ -97,16 +96,20 @@ namespace Microsoft.Framework.PackageManager
 
                 if (string.IsNullOrEmpty(GlobalJsonFile))
                 {
-                    var projectJsonFiles = Directory.GetFiles(restoreDirectory, "project.json", SearchOption.AllDirectories);
-                    foreach (var projectJsonPath in projectJsonFiles)
-                    {
-                        restoreCount += 1;
-                        var success = await RestoreForProject(projectJsonPath, rootDirectory, packagesDirectory);
-                        if (success)
+                    var projectJsonFiles = Directory.EnumerateFiles(restoreDirectory, "project.json", SearchOption.AllDirectories);
+
+                    await ForEachAsync(
+                        projectJsonFiles,
+                        maxDegreesOfConcurrency: Environment.ProcessorCount * 2,
+                        body: async projectJsonPath =>
                         {
-                            successCount += 1;
-                        }
-                    }
+                            Interlocked.Increment(ref restoreCount);
+                            var success = await RestoreForProject(projectJsonPath, rootDirectory, packagesDirectory);
+                            if (success)
+                            {
+                                Interlocked.Increment(ref successCount);
+                            }
+                        });
                 }
                 else
                 {
@@ -346,8 +349,8 @@ namespace Microsoft.Framework.PackageManager
                 var item = resolvedItems[i];
                 var library = libsToRestore[i];
 
-                if (item == null || 
-                    item.Match == null || 
+                if (item == null ||
+                    item.Match == null ||
                     item.Match.Library.Version != library.Version)
                 {
                     missingItems.Add(library);
@@ -471,6 +474,26 @@ namespace Microsoft.Framework.PackageManager
         {
             path = FileSystem.GetFullPath(path);
             return new PhysicalFileSystem(path);
+        }
+
+        // Based on http://blogs.msdn.com/b/pfxteam/archive/2012/03/05/10278165.aspx
+        private static Task ForEachAsync<TVal>(IEnumerable<TVal> source,
+                                               int maxDegreesOfConcurrency,
+                                               Func<TVal, Task> body)
+        {
+            var tasks = from partition in Partitioner.Create(source).GetPartitions(maxDegreesOfConcurrency)
+                        select Task.Run(async () =>
+                        {
+                            using (partition)
+                            {
+                                while (partition.MoveNext())
+                                {
+                                    await body(partition.Current);
+                                }
+                            }
+                        });
+
+            return Task.WhenAll(tasks);
         }
     }
 }
